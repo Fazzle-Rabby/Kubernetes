@@ -1,0 +1,215 @@
+*** Deploy Application in Kubernetes via CLI,YAML,DASHBOARD
+
+///Needed machine kubemaster & kubenode
+
+
+///Master setup
+
+
+//Cluster create on master
+$ sudo kubeadm init --pod-network-cidr=192.168.0.0/16 --apiserver-advertise-address=192.168.1.6
+  [For starting a Calico CNI: 192.168.0.0/16 or For starting a Flannel CNI: 10.244.0.0/16]
+
+
+//Copy the join number of machine
+[later use on slave terminal to join cluster: kubeadm join 192.168.1.6:6443 --token xrjzjy.rc4i5mm6jauprdg0 \
+    --discovery-token-ca-cert-hash sha256:1bd9a270628d4577d8d39f5bd4bf6222d640d069b2ef389100997fb0366327c5]  
+    
+    
+//Run the foillowing command as normal user  
+$ mkdir -p $HOME/.kube
+$ sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+$ sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+
+//For creating a POD network based on Calico
+$ kubectl apply -f https://docs.projectcalico.org/v3.0/getting-started/kubernetes/installation/hosted/kubeadm/1.7/calico.yaml
+
+
+//Detailed status of PODS
+$ kubectl get pods -o wide --all-namespaces
+
+
+//Status of Nodes
+$ kubectl get nodes
+
+
+//Status of PODS
+$ kubectl get pods --all-namespaces
+
+
+//For creating the dashboard first - bring this up before starting nodes
+$ kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.0/aio/deploy/recommended.yaml
+$ kubectl get pods -o wide --all-namespaces
+
+
+//To enable proxy and continues with new terminal window
+$ kubectl proxy
+
+
+//Dashboard & coreDNS panding
+$ export kubever=$(kubectl version | base64 | tr -d '\n')
+$ kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$kubever"
+$ kubectl get pods -o wide --all-namespaces
+
+
+//goning to the browser and search ber= localhost:8001
+
+
+//For accessing the dashboard 
+http://localhost:8001/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy/#!/login {or} http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/
+
+
+
+//Getting error 
+{
+  "kind": "Status",
+  "apiVersion": "v1",
+  "metadata": {
+    
+  },
+  "status": "Failure",
+  "message": "no endpoints available for service \"kubernetes-dashboard\"",
+  "reason": "ServiceUnavailable",
+  "code": 503
+}
+
+
+//endpoint not available
+$ kubectl -n kubernetes-dashboard get endpoints -o wide
+
+
+//To create a service account for your dashboard
+  open new terminal
+$ kubectl create serviceaccount dashboard -n default
+
+
+//To add cluster binding rules for ur roles on dashboard
+$ kubectl create clusterrolebinding dashboard-admin -n default \
+  --clusterrole=cluster-admin \
+  --serviceaccount=default:dashboard
+  
+  
+//To get the secret key to be pasted into the dashboard token pwd. copy the outcoming secret key
+$ kubectl get secret $(kubectl get serviceaccount dashboard -o jsonpath="{.secrets[0].name}") -o jsonpath="{.data.token}" | base64 --decode  
+
+
+
+//For generating token again
+$ sudo kubeadm create --print-join-command
+
+
+///Node setup
+
+
+//join the cluster
+copy the join number and paste
+$ sudo kubeadm join 192.168.1.6:6443 --token xrjzjy.rc4i5mm6jauprdg0 \
+    --discovery-token-ca-cert-hash sha256:1bd9a270628d4577d8d39f5bd4bf6222d640d069b2ef389100997fb0366327c5]
+    
+
+//Going to dashboard-click (nodes) 
+
+
+//Going to master terminal
+$ kubectl get nodes  
+
+
+
+*** Deployment using the (Dashboard)
+
+
+// click create > create an App > Appname(parvez) > container image(nginx) > no. of pods(2) > service(external) > target port(80) default nginx port > deploy
+
+
+//Deployment successful > 2 pods running
+
+//Go to service > click parvez(try to access UI) > internal endpoints(2nd port copy) or cluster ip copy > search bar(localhost:paste) > welcome to nginx
+
+//Successfully building the User Interface
+
+//Master terminal
+$ kubectl get pods -o wide --all-namespaces
+
+
+
+*** Deployment using CLI
+
+
+//Reduce the deployment because of dont want to too many resources to be used on my node
+
+//go to overview > deployment > parvez > click three dot symbol > scale > desired no. of pods(1) > ok > reduce my deployment
+
+//On master for deploying a nginx app through CLI. Usually its done via YAML file
+
+//Create a deployment
+$ kubectl create deployment nginx --image=nginx
+
+//Refresh dashboard
+
+//Verify the deployment
+$ kubectl get deployments
+
+//More details about deployment
+$ kubectl describe deployment nginx
+
+//Create the service on the nodes
+$ kubectl create service nodeport nginx --tcp=80:80
+
+//To check which deployment is running on which node
+$ kubectl get svc
+
+//To delete the deployment 
+$ kubectl delete deployment <deployment name> or also delete from dashboard 
+
+//Refresh dashboard > service > nginx > copy 2nd pot > search bar(localhost:paste) > welcome to nginx
+
+
+
+*** Deployment via YAML file
+
+
+//Creating yaml file
+$ gedit deployment.yaml
+
+---
+ apiversion: extensions/v1beta1
+ kind: Deployment
+ metadata:
+   name: parvez1
+ spec:
+   replicas: 2
+   template:
+     metadata:
+       labels:
+         app: web
+     spec:
+       containers:
+         - name: front-end
+           image: nginx
+           ports:
+             - containerPort: 80
+         - name: back-end
+           image: httpd
+           ports:
+             - containerPort: 88  
+             
+//Save+close
+
+//Create a deployment in kubernetes via yaml file
+$ kubectl create -f deployment.yaml
+
+//Check the deployment
+$ kubectl get deployments
+
+//Go back dashboard > refresh > parvez1(back-off restarting failed container) because of node has less resources > delete previous deployment > refresh dashboard > workload status(red)
+
+//workload status: Red = not ok
+                   Yellow = healthy
+                   Green = ok
+
+//Go back terminal > delete my deployment > $ kubectl delete deployment parvez1 > redeployed again > $ gedit deployment.yaml > delete 2nd container > save
+
+//Go to dashboard > refresh dashboard > now healthy
+
+//Successfully deployment Application                                
